@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Web 3.0 Sayı Kayıt Uygulaması</title>
+    <link rel="stylesheet" href="style.css">
+    <!-- Ethers.js Kütüphanesi -->
+    <script src="https://cdn.ethers.io/lib/ethers-5.7.umd.min.js" type="application/javascript"></script>
+</head>
+<body>
+    <div class="container">
+        <h1>Web 3.0 Sayı Deposu</h1>
+        
+        <div class="status-card">
+            <button id="connectButton">Cüzdanı Bağla</button>
+            <p id="accountArea">Durum: Bağlı Değil</p>
+        </div>
+
+        <div class="action-card">
+            <h3>Sayı Kaydet</h3>
+            <input type="number" id="numberInput" placeholder="Bir sayı girin">
+            <button id="storeButton">Blockchain'e Gönder</button>a
+        </div>
+
+        <div class="display-card">
+            <h3>Kayıtlı Veriler</h3>
+            <button id="refreshButton">Listeyi Güncelle</button>
+            <p>Toplam Kayıt: <span id="countSpan">0</span></p>
+            <ul id="numberList"></ul>
+        </div>
+    </div>
+    <script src="app.js"></script>
+</body>
+</html>
