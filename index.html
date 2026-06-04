@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Web3 Oylama Sistemi</title>
+    <link rel="stylesheet" href="style.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/ethers/6.7.0/ethers.umd.min.js"></script>
+</head>
+<body>
+
+    <div class="container">
+        <header>
+            <h1>🗳️ dApp Oylama Sistemi</h1>
+            <p>Sepolia Test Ağı</p>
+            <button id="connectButton" class="btn-connect">Cüzdanı Bağla</button>
+            <p id="walletAddress" class="wallet-text">Cüzdan bağlı değil.</p>
+        </header>
+
+        <main>
+            <section class="card admin-section">
+                <h3>Yönetici Paneli</h3>
+                <div class="form-group">
+                    <input type="text" id="candidateNameInput" placeholder="Adayın Adı">
+                    <button id="addCandidateButton" class="btn-primary">Aday Ekle</button>
+                </div>
+            </section>
+
+            <section class="card">
+                <h3>Adaylar ve Oy Durumu</h3>
+                <button id="refreshButton" class="btn-secondary">Listeyi Yenile</button>
+                <div id="candidatesContainer" class="candidates-grid">
+                    <p class="loading">Adaylar yükleniyor veya cüzdan bağlı değil...</p>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <script>
+        // --- KONTRAT BİLGİLERİ ---
+        const contractAddress = "0x581F8E84001afeEbDd5af42e56DC540539890d77";
+        const contractABI = [
+            {"inputs":[{"internalType":"string","name":"_name","type":"string"}],"name":"addCandidate","outputs":[],"stateMutability":"nonpayable","type":"function"},
+            {"inputs":[],"stateMutability":"nonpayable","type":"constructor"},
+            {"inputs":[{"internalType":"uint256","name":"_candidateId","type":"uint256"}],"name":"vote","outputs":[],"stateMutability":"nonpayable","type":"function"},
+            {"inputs":[],"name":"getCandidateCount","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},
+            {"inputs":[],"name":"getCandidates","outputs":[{"components":[{"internalType":"uint256","name":"id","type":"uint256"},{"internalType":"string","name":"name","type":"string"},{"internalType":"uint256","name":"voteCount","type":"uint256"}],"internalType":"struct VotingSystem.Candidate[]","name":"","type":"tuple[]"}],"stateMutability":"view","type":"function"},
+            {"inputs":[{"internalType":"address","name":"","type":"address"}],"name":"hasVoted","outputs":[{"internalType":"bool","name":"","type":"bool"}],"stateMutability":"view","type":"function"},
+            {"inputs":[],"name":"owner","outputs":[{"internalType":"address","name":"","type":"address"}],"stateMutability":"view","type":"function"}
+        ];
+
+        let provider;
+        let signer;
+        let contract;
+
+        const connectButton = document.getElementById('connectButton');
+        const walletAddressP = document.getElementById('walletAddress');
+        const candidatesContainer = document.getElementById('candidatesContainer');
+        const addCandidateButton = document.getElementById('addCandidateButton');
+        const candidateNameInput = document.getElementById('candidateNameInput');
+        const refreshButton = document.getElementById('refreshButton');
+
+        // Cüzdan Bağlama Fonksiyonu
+        async function connectWallet() {
+            if (typeof window.ethereum !== 'undefined') {
+                try {
+                    // MetaMask'tan hesap izni iste
+                    const accounts = await window.ethereum.request({ method: 'eth_requestAccounts' });
+                    const account = accounts[0];
+                    walletAddressP.innerText = `Bağlı Hesap: ${account.substring(0,6)}...${account.substring(account.length - 4)}`;
+                    connectButton.innerText = "Bağlandı";
+                    connectButton.disabled = true;
+
+                    // Ethers kurulumu
+                    provider = new ethers.BrowserProvider(window.ethereum);
+                    signer = await provider.getSigner();
+                    contract = new ethers.Contract(contractAddress, contractABI, signer);
+
+                    // Verileri ilk kez çek
+                    loadCandidates();
+                } catch (error) {
+                    console.error("Cüzdan bağlanırken hata oluştu:", error);
+                    alert("Cüzdan bağlantısı reddedildi veya bir hata oluştu.");
+                }
+            } else {
+                alert("Lütfen bir Web3 cüzdanı (Örn: MetaMask) kurun!");
+            }
+        }
+
+        // Adayları Listeleme Fonksiyonu
+        async function loadCandidates() {
+            if (!contract) return;
+            try {
+                candidatesContainer.innerHTML = "<p class='loading'>Güncel veriler çekiliyor...</p>";
+                
+                // Kontrattan adayları çek
+                const candidates = await contract.getCandidates();
+                candidatesContainer.innerHTML = "";
+
+                if (candidates.length === 0) {
+                    candidatesContainer.innerHTML = "<p>Henüz kayıtlı aday yok.</p>";
+                    return;
+                }
+
+                // Kullanıcının daha önce oy verip vermediğini kontrol et
+                const userAddress = await signer.getAddress();
+                const userHasVoted = await contract.hasVoted(userAddress);
+
+                candidates.forEach(candidate => {
+                    // candidate yapısı: [id, name, voteCount]
+                    const id = candidate.id.toString();
+                    const name = candidate.name;
+                    const voteCount = candidate.voteCount.toString();
+
+                    const card = document.createElement('div');
+                    card.className = 'candidate-card';
+                    card.innerHTML = `
+                        <h4>${name}</h4>
+                        <p class="vote-count">🗳️ Oy Sayısı: <strong>${voteCount}</strong></p>
+                        <button class="btn-vote" onclick="voteCandidate(${id})" ${userHasVoted ? 'disabled' : ''}>
+                            ${userHasVoted ? 'Oy Kullandınız' : 'Oy Ver'}
+                        </button>
+                    `;
+                    candidatesContainer.appendChild(card);
+                });
+            } catch (error) {
+                console.error("Adaylar yüklenirken hata:", error);
+                candidatesContainer.innerHTML = "<p class='error'>Veriler yüklenemedi. Doğru ağda (Sepolia) olduğunuzdan emin olun.</p>";
+            }
+        }
+
+        // Oy Verme Fonksiyonu
+        async function voteCandidate(candidateId) {
+            if (!contract) return alert("Önce cüzdanınızı bağlayın!");
+            try {
+                const tx = await contract.vote(candidateId);
+                alert("İşlem blockchain'e gönderildi. Onay bekleniyor...");
+                await tx.wait(); // İşlemin bloklanmasını bekle
+                alert("Oy kullanma işlemi başarıyla tamamlandı!");
+                loadCandidates(); // Listeyi güncelle
+            } catch (error) {
+                console.error("Oy verilirken hata:", error);
+                alert("İşlem iptal edildi veya bir hata oluştu (Zaten oy vermiş olabilirsiniz).");
+            }
+        }
+
+        // Aday Ekleme Fonksiyonu (Yalnızca Owner)
+        async function addCandidate() {
+            const name = candidateNameInput.value.trim();
+            if (!name) return alert("Lütfen geçerli bir aday ismi girin!");
+            if (!contract) return alert("Önce cüzdanınızı bağlayın!");
+
+            try {
+                const tx = await contract.addCandidate(name);
+                alert("Aday ekleme işlemi gönderildi. Onay bekleniyor...");
+                await tx.wait();
+                alert(`"${name}" başarıyla aday olarak eklendi!`);
+                candidateNameInput.value = "";
+                loadCandidates();
+            } catch (error) {
+                console.error("Aday eklenirken hata:", error);
+                alert("Aday eklenemedi. Bu işlemi sadece sözleşme sahibi (owner) yapabilir.");
+            }
+        }
+
+        // Event Listeners
+        connectButton.addEventListener('click', connectWallet);
+        addCandidateButton.addEventListener('click', addCandidate);
+        refreshButton.addEventListener('click', loadCandidates);
+
+        // Hesap değişikliklerini dinle
+        if (window.ethereum) {
+            window.ethereum.on('accountsChanged', () => {
+                window.location.reload();
+            });
+            window.ethereum.on('chainChanged', () => {
+                window.location.reload();
+            });
+        }
+    </script>
+</body>
+</html>
